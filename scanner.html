@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Security Scanner | CyberGuard</title>
+  <link rel="stylesheet" href="css/scanner.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+</head>
+<body>
+<!-- Navigation -->
+<nav class="navbar">
+  <div class="nav-container">
+    <div class="nav-logo">
+      <i class="fas fa-shield-alt"></i>
+      <span>CyberGuard QR Shield</span>
+    </div>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="threats.html" class="nav-link">Threats</a>
+      <a href="scanner.html" class="nav-link active">Scanner</a>
+      <a href="about.html" class="nav-link">About</a>
+    </div>
+    <div class="mobile-menu" id="mobileMenu">
+      <i class="fas fa-bars"></i>
+    </div>
+  </div>
+</nav>
+
+<!-- Scanner Container -->
+<div class="scanner-container">
+  <div class="scanner-header">
+    <h1>Advanced QR Security Analysis</h1>
+    <p>Upload your QR code for comprehensive threat detection</p>
+  </div>
+
+  <div class="scanner-main">
+    <!-- Upload Section -->
+    <div class="upload-section">
+      <div class="upload-area" id="uploadArea">
+        <div class="upload-content">
+          <div class="upload-icon">
+            <i class="fas fa-cloud-upload-alt"></i>
+          </div>
+          <h3>Drop QR Code Image Here</h3>
+          <p>or click to browse files</p>
+          <input type="file" id="qrInput" accept="image/*" hidden>
+          <button class="btn btn-primary" id="chooseFileBtn">
+            <i class="fas fa-folder-open"></i>
+            Choose File
+          </button>
+        </div>
+        <div class="upload-specs">
+          <small>Supports: JPG, PNG, GIF (Max: 10MB)</small>
+        </div>
+      </div>
+
+      <!-- Image Preview -->
+      <div class="image-preview" id="imagePreview" style="display: none;">
+        <div class="preview-header">
+          <h3>Uploaded Image</h3>
+          <button class="btn-clear" id="clearImage">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="preview-image">
+          <img id="previewImg" src="" alt="QR Code Preview">
+        </div>
+        <div class="image-info">
+          <span id="fileName">filename.jpg</span>
+          <span id="fileSize">2.3 MB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analysis Button -->
+    <div class="analysis-controls">
+      <button class="btn btn-analyze" id="analyzeBtn" disabled>
+        <i class="fas fa-search"></i>
+        <span>Analyze QR Code</span>
+        <div class="loading-spinner" style="display: none;"></div>
+      </button>
+    </div>
+
+    <!-- Results Section -->
+    <div class="results-section" id="resultsSection" style="display: none;">
+      <div class="result-card" id="resultCard">
+        <!-- Dynamic content will be inserted here -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- How It Works -->
+<section class="how-it-works">
+  <div class="container">
+    <h2>How Our Security Scanner Works</h2>
+
+    <div class="process-steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          <h3>QR Code Extraction</h3>
+          <p>Our advanced algorithms extract and decode QR code content from your uploaded image.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          <h3>URL Analysis</h3>
+          <p>We check the extracted URL against known malicious domains and phishing databases.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          <h3>Content Inspection</h3>
+          <p>The destination content is analyzed for suspicious patterns and malicious code.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-number">4</div>
+        <div class="step-content">
+          <h3>Threat Assessment</h3>
+          <p>Our AI engine provides a comprehensive security rating and detailed threat report.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-content">
+      <div class="footer-section">
+        <h4>CyberGuard QR Shield</h4>
+        <p>Protecting users from malicious QR codes and cyber threats through advanced AI-powered security analysis.</p>
+      </div>
+      <div class="footer-section">
+        <h4>Security Tips</h4>
+        <ul>
+          <li>Always verify QR source</li>
+          <li>Check URLs before visiting</li>
+          <li>Use trusted payment apps</li>
+          <li>Keep devices updated</li>
+        </ul>
+      </div>
+      <div class="footer-section">
+        <h4>Contact</h4>
+        <p>Report suspicious QR codes<br>security@cyberguard.com</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2025 CyberGuard QR Shield | Advanced Cybersecurity Protection</p>
+    </div>
+  </div>
+</footer>
+
+<script src="js/scanner.js"></script>
+</body>
+</html>
