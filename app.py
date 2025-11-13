@@ -28,6 +28,11 @@ from email import message_from_string, policy
 # -------------------------
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
+# If you need any v2 features, you might need to adjust some syntax
+
+# New: CORS + static serving
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # ML / NLP / DL libs
 import numpy as np
@@ -51,8 +56,8 @@ except Exception:
 # -------------------------
 # >>> CONFIG / CONSTANTS
 # -------------------------
+# NOTE: Consider loading secrets from environment in production.
 GEMINI_API_KEY = "AIzaSyDqX1f-rpLOBRLbWKlw-s3VQ7sPEenlKCw"
-
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # Suspicious TLD set for simple heuristics
@@ -215,77 +220,89 @@ def get_gemini_client():
 async def gemini_link_decision(url: str, context_text: Optional[str], page_fetch: bool = True) -> Dict[str, Any]:
     """
     Ask Gemini to classify a URL. Returns parsed JSON {risk_score,label,reasons,suggestions}.
-    If Gemini not configured, raise HTTPException so callers gracefully degrade.
+    If Gemini not configured or has errors, return None gracefully.
     """
     if not GEMINI_API_KEY or not _HAS_GENAI:
-        raise HTTPException(status_code=400, detail="Gemini not configured")
-    client = get_gemini_client()
+        return None  # Return None instead of raising exception
 
-    prompt = f"""
+    try:
+        client = get_gemini_client()
+
+        prompt = f"""
 You are a security classifier for UPI/phishing links.
 Return strict JSON with: risk_score (0-1), label (safe|suspicious|malicious), reasons[], suggestions[].
 URL: {url}
 Context: {context_text or ""}
 """
-    cfg = gtypes.GenerateContentConfig(
-        temperature=0.2,
-        response_mime_type="application/json",
-        response_schema={
-            "type":"object",
-            "properties":{
-                "risk_score":{"type":"number"},
-                "label":{"type":"string"},
-                "reasons":{"type":"array","items":{"type":"string"}},
-                "suggestions":{"type":"array","items":{"type":"string"}}
-            },
-            "required":["risk_score","label","reasons","suggestions"]
-        }
-    )
-    resp = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=[gtypes.Content(role="user", parts=[gtypes.Part.from_text(prompt), gtypes.Part.from_text(url)])],
-        config=cfg
-    )
-    try:
-        return resp.parsed if getattr(resp, "parsed", None) else json.loads(resp.text)
-    except Exception:
-        return {"risk_score": 0.5, "label": "suspicious", "reasons": ["parse_error"], "suggestions": ["retry"]}
+        cfg = gtypes.GenerateContentConfig(
+            temperature=0.2,
+            response_mime_type="application/json",
+            response_schema={
+                "type":"object",
+                "properties":{
+                    "risk_score":{"type":"number"},
+                    "label":{"type":"string"},
+                    "reasons":{"type":"array","items":{"type":"string"}},
+                    "suggestions":{"type":"array","items":{"type":"string"}}
+                },
+                "required":["risk_score","label","reasons","suggestions"]
+            }
+        )
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[gtypes.Content(role="user", parts=[gtypes.Part.from_text(prompt), gtypes.Part.from_text(url)])],
+            config=cfg
+        )
+        try:
+            return resp.parsed if getattr(resp, "parsed", None) else json.loads(resp.text)
+        except Exception:
+            return {"risk_score": 0.5, "label": "suspicious", "reasons": ["parse_error"], "suggestions": ["retry"]}
+
+    except Exception as e:
+        print(f"Gemini API error (link): {e}")
+        return None  # Return None instead of crashing
 
 async def gemini_message_decision(message: str, sender: Optional[str]) -> Dict[str, Any]:
     """Ask Gemini to classify a message. Same JSON schema as link decision."""
     if not GEMINI_API_KEY or not _HAS_GENAI:
-        raise HTTPException(status_code=400, detail="Gemini not configured")
-    client = get_gemini_client()
+        return None  # Return None instead of raising exception
 
-    prompt = f"""
+    try:
+        client = get_gemini_client()
+
+        prompt = f"""
 Classify SMS/chat for UPI scam risk.
 Return JSON: risk_score(0-1), label(safe|suspicious|malicious), reasons[], suggestions[].
 Sender: {sender or "unknown"}
 Message: {message}
 """
-    cfg = gtypes.GenerateContentConfig(
-        temperature=0.2,
-        response_mime_type="application/json",
-        response_schema={
-            "type":"object",
-            "properties":{
-                "risk_score":{"type":"number"},
-                "label":{"type":"string"},
-                "reasons":{"type":"array","items":{"type":"string"}},
-                "suggestions":{"type":"array","items":{"type":"string"}}
-            },
-            "required":["risk_score","label","reasons","suggestions"]
-        }
-    )
-    resp = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=[gtypes.Content(role="user", parts=[gtypes.Part.from_text(prompt)])],
-        config=cfg
-    )
-    try:
-        return resp.parsed if getattr(resp, "parsed", None) else json.loads(resp.text)
-    except Exception:
-        return {"risk_score": 0.5, "label": "suspicious", "reasons": ["parse_error"], "suggestions": ["retry"]}
+        cfg = gtypes.GenerateContentConfig(
+            temperature=0.2,
+            response_mime_type="application/json",
+            response_schema={
+                "type":"object",
+                "properties":{
+                    "risk_score":{"type":"number"},
+                    "label":{"type":"string"},
+                    "reasons":{"type":"array","items":{"type":"string"}},
+                    "suggestions":{"type":"array","items":{"type":"string"}}
+                },
+                "required":["risk_score","label","reasons","suggestions"]
+            }
+        )
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[gtypes.Content(role="user", parts=[gtypes.Part.from_text(prompt)])],
+            config=cfg
+        )
+        try:
+            return resp.parsed if getattr(resp, "parsed", None) else json.loads(resp.text)
+        except Exception:
+            return {"risk_score": 0.5, "label": "suspicious", "reasons": ["parse_error"], "suggestions": ["retry"]}
+
+    except Exception as e:
+        print(f"Gemini API error (message): {e}")
+        return None  # Return None instead of crashing
 
 # -------------------------
 # >>> QR decoding helpers (pyzbar first, OpenCV fallback)
@@ -351,6 +368,33 @@ def decode_qr_image_bytes(data: bytes) -> Optional[List[str]]:
 # >>> FastAPI app + Schemas
 # -------------------------
 app = FastAPI(title="FraudBlocker AI", version="1.2")
+
+# ---------- CORS / Static configuration (ADDED) ----------
+_ALLOWED_ORIGINS = [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:5173",  # Vite dev server
+    "http://127.0.0.1:5173", # Vite dev server
+    "http://localhost:8080",  # Common port
+    "http://127.0.0.1:8080", # Common port
+    "*"  # Allow all origins (for testing only)
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Optional: if you want to serve your frontend from ./static
+if os.path.isdir("static"):
+    app.mount("/app", StaticFiles(directory="static", html=True), name="static_ui")
+# ---------------------------------------------------------
 
 # Request/response Pydantic models
 class InspectLinkRequest(BaseModel):
@@ -671,6 +715,7 @@ async def inspect_email(req: InspectEmailRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
+
 # -------------------------
 # >>> Simple homepage + favicon to avoid 404 noise
 # -------------------------
@@ -711,395 +756,3 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=True)
 
-
-
-# import os
-# import re
-# import json
-# import uvicorn
-# import hashlib
-# import socket
-# from datetime import datetime, timezone
-# from typing import List, Optional, Dict, Any
-# from urllib.parse import urlparse, parse_qs
-#
-# from fastapi import FastAPI, HTTPException
-# from pydantic import BaseModel, Field
-#
-# # -------------------------------
-# # CONFIG: Single place for API key
-# # -------------------------------
-# # Replace with your Gemini key, or set env var GEMINI_API_KEY
-# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAu64ChaCdgg--udtmoOsj00Or2H6u8Wis")  # <-- REPLACE KEY HERE
-# GEMINI_MODEL = "gemini-2.5-flash"
-#
-# # -------------------------------
-# # Gemini client (single instance)
-# # -------------------------------
-# from google import genai
-# from google.genai import types as gtypes
-#
-# def get_gemini_client():
-#     # Picks key from this one location or from env var as supported by SDK [uses single key]
-#     return genai.Client(api_key=GEMINI_API_KEY)
-#
-# # ----------------------------------------
-# # NLP + Deep Learning: minimal baseline
-# # ----------------------------------------
-# # NLP section: tokenization, TF-IDF features (classical NLP)
-# # Deep learning section: lightweight neural model via Keras for binary classification
-# # Both are optional baselines that run locally and fuse with Gemini's judgment.
-#
-# # ---- NLP (classical): TF-IDF + Logistic Regression ----
-# from sklearn.feature_extraction.text import TfidfVectorizer
-# from sklearn.linear_model import LogisticRegression
-#
-# NLP_SEED_SUSPICIOUS = [
-#     "urgent your account will be blocked verify now",
-#     "win lottery claim reward click link",
-#     "update kyc immediately to avoid suspension",
-#     "refund pending complete payment to receive",
-#     "upi request from unknown sender approve now",
-#     "security alert unusual login provide otp",
-#     "investment double money guaranteed",
-#     "official notice pay service fee immediately",
-#     "free gift limited time click here",
-#     "scam attempt payment link phishing"
-# ]
-# NLP_SEED_SAFE = [
-#     "payment received successfully thank you",
-#     "your order has been dispatched",
-#     "upi payment to trusted merchant completed",
-#     "monthly newsletter updates and offers",
-#     "meeting at 3pm see you",
-#     "your phone bill receipt is attached",
-# ]
-#
-# VEC = TfidfVectorizer(ngram_range=(1,2), min_df=1, max_features=6000)
-# X = VEC.fit_transform(NLP_SEED_SUSPICIOUS + NLP_SEED_SAFE)
-# y = [1]*len(NLP_SEED_SUSPICIOUS) + [0]*len(NLP_SEED_SAFE)
-# NLP_CLS = LogisticRegression(max_iter=1000).fit(X, y)
-#
-# def nlp_score(text: str) -> float:
-#     # NLP usage: transforms text via TF-IDF and predicts suspicious probability
-#     vec = VEC.transform([text.lower()])
-#     return float(NLP_CLS.predict_proba(vec)[0][1])
-#
-# # ---- Deep Learning: Tiny Keras model over simple features ----
-# # Note: This is intentionally lightweight for single-file demo purposes.
-# # In production, replace with a proper transformer or a trained model artifact.
-# import numpy as np
-# from tensorflow import keras
-# from tensorflow.keras import layers
-#
-# def make_deep_model(input_dim: int) -> keras.Model:
-#     model = keras.Sequential([
-#         layers.Input(shape=(input_dim,)),
-#         layers.Dense(16, activation="relu"),
-#         layers.Dense(8, activation="relu"),
-#         layers.Dense(1, activation="sigmoid"),
-#     ])
-#     model.compile(optimizer="adam", loss="binary_crossentropy")
-#     return model
-#
-# # Build a simple URL/message feature extractor for the deep model
-# PHISH_KEYWORDS = [
-#     "kyc","update","verify","urgent","immediately","otp","limited","refund","reward",
-#     "investment","double","gift","lottery","block","suspend","approve","verification"
-# ]
-# def dl_features(text: str) -> np.ndarray:
-#     text_l = text.lower()
-#     feats = [
-#         len(text_l) / 500.0,                                  # normalized length
-#         sum(k in text_l for k in PHISH_KEYWORDS) / 10.0,      # keyword density
-#         text_l.count("http") / 3.0,                           # link count heuristic
-#         int(any(c.isdigit() for c in text_l)) * 0.3,          # has digits (could be OTP/amount)
-#         int("upi" in text_l) * 0.4,                           # mentions UPI
-#     ]
-#     return np.array(feats, dtype="float32")[None, ...]
-#
-# DL_INPUT_DIM = 5
-# DEEP_MODEL = make_deep_model(DL_INPUT_DIM)
-#
-# # Quick synthetic training so the model produces non-trivial outputs
-# X_train = []
-# y_train = []
-# for t in NLP_SEED_SUSPICIOUS + NLP_SEED_SAFE:
-#     X_train.append(dl_features(t)[0])
-#     y_train.append(1 if t in NLP_SEED_SUSPICIOUS else 0)
-# X_train = np.array(X_train, dtype="float32")
-# y_train = np.array(y_train, dtype="float32")
-# DEEP_MODEL.fit(X_train, y_train, epochs=10, verbose=0)
-#
-# def deep_score(text: str) -> float:
-#     # Deep learning usage: Keras model over engineered features
-#     p = float(DEEP_MODEL.predict(dl_features(text), verbose=0)[0][0])
-#     return p
-#
-# # ----------------------------------------
-# # Heuristics for link inspection
-# # ----------------------------------------
-# SUSPICIOUS_TLDS = {".ru", ".tk", ".cn", ".ml", ".ga", ".gq"}
-#
-# def extract_url_features(url: str) -> Dict[str, Any]:
-#     parsed = urlparse(url)
-#     host = parsed.netloc.lower()
-#     path = parsed.path.lower()
-#     tld = "." + host.split(".")[-1] if "." in host else ""
-#     feats = {
-#         "host": host,
-#         "path": path,
-#         "tld": tld,
-#         "has_ip_host": bool(re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", host)),
-#         "many_subdomains": host.count(".") >= 3,
-#         "has_at_symbol": "@" in url,
-#         "long_url": len(url) > 120,
-#         "suspicious_tld": tld in SUSPICIOUS_TLDS,
-#     }
-#     return feats
-#
-# def heuristic_url_score(feats: Dict[str, Any]) -> float:
-#     score = 0.0
-#     if feats["has_ip_host"]: score += 0.3
-#     if feats["many_subdomains"]: score += 0.2
-#     if feats["has_at_symbol"]: score += 0.2
-#     if feats["long_url"]: score += 0.1
-#     if feats["suspicious_tld"]: score += 0.3
-#     if "login" in feats["path"] or "verify" in feats["path"]: score += 0.2
-#     return min(score, 0.95)
-#
-# def fuse_scores(nlp: float, deep: float, heur: float, gem: Optional[float]) -> float:
-#     # Weighted fusion: prioritize Gemini if available
-#     base = 0.35*nlp + 0.35*deep + 0.30*heur
-#     if gem is not None:
-#         return float(0.5*gem + 0.5*base)
-#     return float(base)
-#
-# def sha256(s: str) -> str:
-#     import hashlib
-#     return hashlib.sha256(s.encode("utf-8")).hexdigest()
-#
-# # ----------------------------------------
-# # FastAPI app and schemas
-# # ----------------------------------------
-# app = FastAPI(title="FraudBlocker AI", version="1.1")
-#
-# class InspectLinkRequest(BaseModel):
-#     url: str
-#     context_text: Optional[str] = None
-#
-# class InspectMessageRequest(BaseModel):
-#     message: str
-#     sender: Optional[str] = None
-#
-# class InspectQRRequest(BaseModel):
-#     qr_text: str
-#
-# class RiskResult(BaseModel):
-#     risk_score: float
-#     label: str
-#     reasons: List[str]
-#     suggestions: List[str]
-#     gemini_decision: Optional[Dict[str, Any]] = None
-#     artifacts: Dict[str, Any] = {}
-#
-# # ----------------------------------------
-# # Gemini usage helpers (clearly marked)
-# # ----------------------------------------
-# # GEMINI USAGE: URL Context + structured JSON output
-# async def gemini_link_decision(url: str, context_text: Optional[str], page_fetch: bool = True) -> Dict[str, Any]:
-#     if not GEMINI_API_KEY or GEMINI_API_KEY == "REPLACE_WITH_YOUR_GEMINI_API_KEY":
-#         raise HTTPException(status_code=400, detail="Gemini API key not set")
-#     client = get_gemini_client()
-#
-#     prompt = f"""
-# You are a security classifier for UPI/phishing links.
-# Return strict JSON with: risk_score (0-1), label (safe|suspicious|malicious), reasons[], suggestions[].
-# URL: {url}
-# Context: {context_text or ""}
-# """
-#     tools = [gtypes.Tool(url_context=gtypes.UrlContext())] if page_fetch else []
-#     cfg = gtypes.GenerateContentConfig(
-#         temperature=0.2,
-#         tools=tools,
-#         response_mime_type="application/json",
-#         response_schema={
-#             "type":"object",
-#             "properties":{
-#                 "risk_score":{"type":"number"},
-#                 "label":{"type":"string"},
-#                 "reasons":{"type":"array","items":{"type":"string"}},
-#                 "suggestions":{"type":"array","items":{"type":"string"}}
-#             },
-#             "required":["risk_score","label","reasons","suggestions"]
-#         }
-#     )
-#     resp = client.models.generate_content(
-#         model=GEMINI_MODEL,
-#         contents=[gtypes.Content(role="user", parts=[gtypes.Part.from_text(prompt), gtypes.Part.from_text(url)])],
-#         config=cfg
-#     )
-#     try:
-#         return resp.parsed if getattr(resp, "parsed", None) else json.loads(resp.text)
-#     except Exception:
-#         return {"risk_score": 0.5, "label": "suspicious", "reasons": ["parse_error"], "suggestions": ["retry"]}
-#
-# # GEMINI USAGE: Message classification (text-only)
-# async def gemini_message_decision(message: str, sender: Optional[str]) -> Dict[str, Any]:
-#     if not GEMINI_API_KEY or GEMINI_API_KEY == "REPLACE_WITH_YOUR_GEMINI_API_KEY":
-#         raise HTTPException(status_code=400, detail="Gemini API key not set")
-#     client = get_gemini_client()
-#     prompt = f"""
-# Classify SMS/chat for UPI scam risk.
-# Return JSON: risk_score(0-1), label(safe|suspicious|malicious), reasons[], suggestions[].
-# Sender: {sender or "unknown"}
-# Message: {message}
-# """
-#     cfg = gtypes.GenerateContentConfig(
-#         temperature=0.2,
-#         response_mime_type="application/json",
-#         response_schema={
-#             "type":"object",
-#             "properties":{
-#                 "risk_score":{"type":"number"},
-#                 "label":{"type":"string"},
-#                 "reasons":{"type":"array","items":{"type":"string"}},
-#                 "suggestions":{"type":"array","items":{"type":"string"}}
-#             },
-#             "required":["risk_score","label","reasons","suggestions"]
-#         }
-#     )
-#     resp = client.models.generate_content(
-#         model=GEMINI_MODEL,
-#         contents=[gtypes.Content(role="user", parts=[gtypes.Part.from_text(prompt)])],
-#         config=cfg
-#     )
-#     try:
-#         return resp.parsed if getattr(resp, "parsed", None) else json.loads(resp.text)
-#     except Exception:
-#         return {"risk_score": 0.5, "label": "suspicious", "reasons": ["parse_error"], "suggestions": ["retry"]}
-#
-# # ----------------------------------------
-# # Endpoints
-# # ----------------------------------------
-# @app.post("/inspect/link", response_model=RiskResult)
-# async def inspect_link(req: InspectLinkRequest):
-#     feats = extract_url_features(req.url)
-#     heur = heuristic_url_score(feats)
-#     text_for_models = f"{req.context_text or ''} {req.url}"
-#
-#     # NLP usage
-#     nlp = nlp_score(text_for_models)
-#
-#     # Deep learning usage
-#     deep = deep_score(text_for_models)
-#
-#     # GEMINI usage (URL Context)
-#     try:
-#         gem = await gemini_link_decision(req.url, req.context_text, page_fetch=True)
-#         g_score = float(gem.get("risk_score", None)) if isinstance(gem, dict) else None
-#     except HTTPException:
-#         gem, g_score = None, None
-#
-#     fused = fuse_scores(nlp, deep, heur, g_score)
-#     label = "malicious" if fused >= 0.8 else ("suspicious" if fused >= 0.45 else "safe")
-#
-#     reasons = []
-#     if feats["suspicious_tld"]: reasons.append("Suspicious TLD")
-#     if feats["has_ip_host"]: reasons.append("IP host")
-#     if feats["many_subdomains"]: reasons.append("Many subdomains")
-#     if feats["has_at_symbol"]: reasons.append("Contains @")
-#     if "verify" in feats["path"]: reasons.append("Verify in path")
-#
-#     return RiskResult(
-#         risk_score=round(fused, 3),
-#         label=label,
-#         reasons=reasons + (gem.get("reasons", []) if gem else []),
-#         suggestions=(gem.get("suggestions", []) if gem else []) or [
-#             "Avoid entering UPI PIN/OTP on web pages",
-#             "Verify payee UPI ID in official app",
-#             "Open links only from trusted sources"
-#         ],
-#         gemini_decision=gem,
-#         artifacts={"features": feats, "url_sha256": sha256(req.url)}
-#     )
-#
-# @app.post("/inspect/message", response_model=RiskResult)
-# async def inspect_message(req: InspectMessageRequest):
-#     text = req.message.strip()
-#
-#     # NLP usage
-#     nlp = nlp_score(text)
-#
-#     # Deep learning usage
-#     deep = deep_score(text)
-#
-#     # Heuristic: simple signal from keywords
-#     heur = min(sum(k in text.lower() for k in PHISH_KEYWORDS) * 0.1, 0.9)
-#
-#     # GEMINI usage (text classification)
-#     try:
-#         gem = await gemini_message_decision(text, req.sender)
-#         g_score = float(gem.get("risk_score", None)) if isinstance(gem, dict) else None
-#     except HTTPException:
-#         gem, g_score = None, None
-#
-#     fused = fuse_scores(nlp, deep, heur, g_score)
-#     label = "malicious" if fused >= 0.8 else ("suspicious" if fused >= 0.45 else "safe")
-#
-#     return RiskResult(
-#         risk_score=round(fused, 3),
-#         label=label,
-#         reasons=(gem.get("reasons", []) if gem else []),
-#         suggestions=(gem.get("suggestions", []) if gem else []) or [
-#             "Never share OTP/UPI PIN",
-#             "Verify with official support",
-#             "Avoid tapping unknown links"
-#         ],
-#         gemini_decision=gem,
-#         artifacts={"message_sha256": sha256(text)}
-#     )
-#
-# @app.post("/inspect/qr", response_model=RiskResult)
-# async def inspect_qr(req: InspectQRRequest):
-#     qr = req.qr_text.strip()
-#     # Treat QR content as text for NLP/Deep + heuristics if it looks like a URL
-#     looks_like_url = bool(re.match(r"^\w+://", qr) or qr.lower().startswith("upi:"))
-#     feats = extract_url_features(qr) if looks_like_url else {"path": "", "suspicious_tld": False, "has_ip_host": False, "many_subdomains": False, "has_at_symbol": False}
-#     heur = heuristic_url_score(feats) if looks_like_url else 0.1
-#
-#     # NLP usage
-#     nlp = nlp_score(qr)
-#
-#     # Deep learning usage
-#     deep = deep_score(qr)
-#
-#     # GEMINI usage: analyze payload without forced fetch
-#     try:
-#         gem = await gemini_link_decision(qr, "QR decoded content", page_fetch=False)
-#         g_score = float(gem.get("risk_score", None)) if isinstance(gem, dict) else None
-#     except HTTPException:
-#         gem, g_score = None, None
-#
-#     fused = fuse_scores(nlp, deep, heur, g_score)
-#     label = "malicious" if fused >= 0.8 else ("suspicious" if fused >= 0.45 else "safe")
-#
-#     return RiskResult(
-#         risk_score=round(fused, 3),
-#         label=label,
-#         reasons=(gem.get("reasons", []) if gem else []),
-#         suggestions=(gem.get("suggestions", []) if gem else []) or [
-#             "Confirm payee in official UPI app",
-#             "Avoid scanning unknown QR codes",
-#             "Disable auto-approve of collect requests"
-#         ],
-#         gemini_decision=gem,
-#         artifacts={"qr_sha256": sha256(qr), "looks_like_url": looks_like_url}
-#     )
-#
-# @app.get("/health")
-# async def health():
-#     return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
-#
-# if __name__ == "__main__":
-#     uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=False)

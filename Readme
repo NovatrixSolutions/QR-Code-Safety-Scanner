@@ -1,0 +1,8 @@
+# Navigate to your project folder
+cd C:\Users\admin\Desktop\QR-Code-Safety-Scanner
+
+# Activate the EXISTING environment (no reinstall needed)
+.\.venv_tf216\Scripts\Activate.ps1
+
+# Run your app
+uvicorn app:app --host 127.0.0.1 --port 8000 --reload
