@@ -1,16 +1,21 @@
+
+
+
+
+
 // JavaScript for Scanner page
 
 document.addEventListener('DOMContentLoaded', function() {
     // Mobile menu toggle
     const mobileMenu = document.getElementById('mobileMenu');
     const navLinks = document.querySelector('.nav-links');
-    
+
     if (mobileMenu) {
         mobileMenu.addEventListener('click', function() {
             navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
         });
     }
-    
+
     // Elements
     const uploadArea = document.getElementById('uploadArea');
     const qrInput = document.getElementById('qrInput');
@@ -23,59 +28,59 @@ document.addEventListener('DOMContentLoaded', function() {
     const analyzeBtn = document.getElementById('analyzeBtn');
     const resultsSection = document.getElementById('resultsSection');
     const resultCard = document.getElementById('resultCard');
-    
+
     // Event Listeners
     chooseFileBtn.addEventListener('click', () => qrInput.click());
-    
+
     qrInput.addEventListener('change', handleFileSelect);
-    
+
     uploadArea.addEventListener('dragover', (e) => {
         e.preventDefault();
         uploadArea.style.borderColor = 'var(--primary-color)';
         uploadArea.style.backgroundColor = '#f8fafc';
     });
-    
+
     uploadArea.addEventListener('dragleave', () => {
         uploadArea.style.borderColor = 'var(--border-color)';
         uploadArea.style.backgroundColor = 'white';
     });
-    
+
     uploadArea.addEventListener('drop', (e) => {
         e.preventDefault();
         uploadArea.style.borderColor = 'var(--border-color)';
         uploadArea.style.backgroundColor = 'white';
-        
+
         if (e.dataTransfer.files.length) {
             qrInput.files = e.dataTransfer.files;
             handleFileSelect();
         }
     });
-    
+
     clearImage.addEventListener('click', resetUpload);
-    
+
     analyzeBtn.addEventListener('click', analyzeQRCode);
-    
+
     // Functions
     function handleFileSelect() {
         if (!qrInput.files || !qrInput.files[0]) return;
-        
+
         const file = qrInput.files[0];
         const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
-        
+
         if (!validTypes.includes(file.type)) {
             alert('Please select a valid image file (JPG, PNG, GIF)');
             resetUpload();
             return;
         }
-        
+
         if (file.size > 10 * 1024 * 1024) {
             alert('File size exceeds 10MB limit');
             resetUpload();
             return;
         }
-        
+
         const reader = new FileReader();
-        
+
         reader.onload = function(e) {
             previewImg.src = e.target.result;
             fileName.textContent = file.name;
@@ -83,10 +88,10 @@ document.addEventListener('DOMContentLoaded', function() {
             imagePreview.style.display = 'block';
             analyzeBtn.disabled = false;
         };
-        
+
         reader.readAsDataURL(file);
     }
-    
+
     function resetUpload() {
         qrInput.value = '';
         previewImg.src = '';
@@ -94,31 +99,31 @@ document.addEventListener('DOMContentLoaded', function() {
         analyzeBtn.disabled = true;
         resultsSection.style.display = 'none';
     }
-    
+
     function formatFileSize(bytes) {
         if (bytes < 1024) return bytes + ' bytes';
         else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
         else return (bytes / 1048576).toFixed(1) + ' MB';
     }
-    
+
     function analyzeQRCode() {
         // Show loading state
         analyzeBtn.querySelector('.loading-spinner').style.display = 'block';
         analyzeBtn.disabled = true;
-        
+
         // Simulate analysis (in a real app, this would be an API call)
         setTimeout(() => {
             analyzeBtn.querySelector('.loading-spinner').style.display = 'none';
             analyzeBtn.disabled = false;
-            
+
             // Generate fake analysis results
             const isSafe = Math.random() > 0.5;
             const threatLevel = isSafe ? 'safe' : (Math.random() > 0.5 ? 'suspicious' : 'malicious');
-            
+
             displayResults(threatLevel);
         }, 2000);
     }
-    
+
     function displayResults(threatLevel) {
         // Sample data for demonstration
         const sampleData = {
@@ -183,9 +188,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 recommendation: 'This QR code is highly likely to be malicious. Do not proceed and delete this QR code immediately.'
             }
         };
-        
+
         const data = sampleData[threatLevel];
-        
+
         // Build results HTML
         let html = `
             <div class="result-header">
@@ -197,17 +202,17 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="result-body">
                 <a href="#" class="result-url">${data.url}</a>
-                
+
                 <div class="threat-indicators">
                     <h3>Security Indicators</h3>
                     <div class="indicator-grid">
         `;
-        
+
         data.indicators.forEach(indicator => {
             html += `
                 <div class="indicator-item">
-                    <i class="fas ${indicator.status === 'safe' ? 'fa-check-circle indicator-safe' : 
-                                  indicator.status === 'warning' ? 'fa-exclamation-triangle indicator-warning' : 
+                    <i class="fas ${indicator.status === 'safe' ? 'fa-check-circle indicator-safe' :
+                                  indicator.status === 'warning' ? 'fa-exclamation-triangle indicator-warning' :
                                   'fa-times-circle indicator-danger'} indicator-icon"></i>
                     <div>
                         <strong>${indicator.type}:</strong> ${indicator.text}
@@ -215,15 +220,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             `;
         });
-        
+
         html += `
                     </div>
                 </div>
-                
+
                 <div class="result-details">
                     <h3>Detailed Analysis</h3>
         `;
-        
+
         data.details.forEach(detail => {
             html += `
                 <div class="detail-item">
@@ -232,20 +237,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             `;
         });
-        
+
         html += `
                 </div>
-                
+
                 <div class="recommendation">
                     <h3>Security Recommendation</h3>
                     <p>${data.recommendation}</p>
                 </div>
             </div>
         `;
-        
+
         resultCard.innerHTML = html;
         resultsSection.style.display = 'block';
-        
+
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth' });
     }
